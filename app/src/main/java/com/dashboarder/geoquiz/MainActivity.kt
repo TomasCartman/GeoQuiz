@@ -1,8 +1,11 @@
 package com.dashboarder.geoquiz
 
+import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.ActivityOptions
 import android.content.Intent
 import android.nfc.Tag
+import android.os.Build
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.util.Log
@@ -25,6 +28,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var nextImageButton : ImageButton
     private lateinit var previousImageButton : ImageButton
     private lateinit var questionTextView : TextView
+    private lateinit var remainingCheatsTextView : TextView
     private var score = 0
     private var count = 0
 
@@ -32,6 +36,7 @@ class MainActivity : AppCompatActivity() {
         ViewModelProviders.of(this).get(QuizViewModel::class.java)
     }
 
+    @SuppressLint("RestrictedApi")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -47,6 +52,10 @@ class MainActivity : AppCompatActivity() {
         nextImageButton = findViewById(R.id.next_imageButton)
         previousImageButton = findViewById(R.id.previous_imageButton)
         questionTextView = findViewById(R.id.question_text_view)
+        remainingCheatsTextView = findViewById(R.id.remaining_cheats_textView)
+
+        remainingCheatsTextView.text = quizViewModel.remainingCheats.toString()
+            .plus(" Remaining cheats")
 
         trueButton.setOnClickListener {
                 view: View ->
@@ -64,9 +73,19 @@ class MainActivity : AppCompatActivity() {
         }
 
         cheatButton.setOnClickListener {
-            val answerIsTrue = quizViewModel.currentQuestionAnswer
-            val intent = CheatActivity.newIntent(this@MainActivity, answerIsTrue)
-            startActivityForResult(intent, REQUEST_CODE_CHEAT)
+            view ->
+                val answerIsTrue = quizViewModel.currentQuestionAnswer
+                val intent = CheatActivity.newIntent(this@MainActivity, answerIsTrue)
+
+                if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    val options =
+                        ActivityOptions.makeClipRevealAnimation(view, 0, 0, view.width, view.height)
+
+                    startActivityForResult(intent, REQUEST_CODE_CHEAT, options.toBundle())
+                } else {
+                    startActivityForResult(intent, REQUEST_CODE_CHEAT)
+                }
+
         }
 
         previousImageButton.setOnClickListener {
@@ -123,7 +142,14 @@ class MainActivity : AppCompatActivity() {
 
         if(resultCode != Activity.RESULT_OK) return
         if(requestCode == REQUEST_CODE_CHEAT) {
-            quizViewModel.currentUserHasCheated = data?.getBooleanExtra(EXTRA_ANSWER_SHOWN, false) ?: false
+            val userHasCheated = data?.getBooleanExtra(EXTRA_ANSWER_SHOWN, false) ?: false
+            quizViewModel.currentUserHasCheated = userHasCheated
+            if(userHasCheated) {
+                quizViewModel.remainingCheats -= 1
+                remainingCheatsTextView.text = quizViewModel.remainingCheats.toString()
+                    .plus(" Remaining cheats")
+                checkButtonIsEnable()
+            }
         }
     }
 
@@ -141,6 +167,7 @@ class MainActivity : AppCompatActivity() {
             trueButton.isEnabled = true
             falseButton.isEnabled = true
         }
+        if(quizViewModel.remainingCheats <= 0) cheatButton.isEnabled = false
     }
 
     private fun checkAnswer(userAnswer: Boolean) {
